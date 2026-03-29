@@ -199,13 +199,468 @@
     </link>
   </model>
 
-  <!--
-    Phase 3 will add:
-      - Internal dividing wall with doorway (creating Room 1 + Room 2)
-      - Furniture: tables, chairs, couch, shelf
-      - 6 pickup objects (dynamic cylinders/boxes)
-      - Collection box (hollow static shell)
-  -->
+  <!-- ═══════════════════════════════════════════════════════════════
+       PHASE 3: TWO-ROOM HOME LAYOUT
+
+       Coordinate system:
+         X: west(-) → east(+),  robot moves in +X to go from R1 to R2
+         Y: south(-) → north(+)
+         Z: up
+
+       Room 1 (living room): x = 0   → 5.0,  y = -4.5 → +4.5
+       Room 2 (study):       x = 5.0 → 9.5,  y = -4.5 → +4.5
+       Doorway:              x = 5.0, y = -0.5 → +0.5  (1.0m gap)
+
+       SDF model structure:
+         <model>
+           <static>true/false</static>       static = immovable (walls, furniture)
+           <pose>x y z roll pitch yaw</pose>  pose of the model's origin
+           <link name="link">
+             <inertial>...</inertial>         REQUIRED for dynamic models
+             <collision name="c">...</collision>
+             <visual name="v">...</visual>
+           </link>
+         </model>
+
+       KEY RULE: static models need NO inertial block.
+                 dynamic models (pickup objects) MUST have a correct inertial.
+                 A dynamic model with wrong inertia explodes on spawn.
+  ═══════════════════════════════════════════════════════════════ -->
+
+  <!-- ─────────────────────────────────────────────────────────────────
+       INTERNAL DIVIDING WALL
+       One wall at x=5.0 split into two segments around the doorway.
+       Doorway: 1.0m gap centered at y=0, so segments are:
+         south: y = -4.5 to -0.5   (4.0m long, center at y=-2.5)
+         north: y = +0.5 to +4.5   (4.0m long, center at y=+2.5)
+
+       Why two separate models instead of one?
+         SDF does not support "cut-outs" in geometry.
+         The only way to make a gap is to split the wall into segments.
+         This is standard practice in Gazebo world-building.
+  ───────────────────────────────────────────────────────────────── -->
+
+  <model name="divider_south">
+    <static>true</static>
+    <pose>5.0 -2.5 1.2 0 0 0</pose>
+    <link name="link">
+      <collision name="collision">
+        <geometry><box><size>0.15 4.0 2.4</size></box></geometry>
+        <surface><friction><ode><mu>0.6</mu><mu2>0.6</mu2></ode></friction></surface>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.15 4.0 2.4</size></box></geometry>
+        <material><ambient>0.9 0.9 0.88 1</ambient><diffuse>0.9 0.9 0.88 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <model name="divider_north">
+    <static>true</static>
+    <pose>5.0 2.5 1.2 0 0 0</pose>
+    <link name="link">
+      <collision name="collision">
+        <geometry><box><size>0.15 4.0 2.4</size></box></geometry>
+        <surface><friction><ode><mu>0.6</mu><mu2>0.6</mu2></ode></friction></surface>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.15 4.0 2.4</size></box></geometry>
+        <material><ambient>0.9 0.9 0.88 1</ambient><diffuse>0.9 0.9 0.88 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <!-- ─────────────────────────────────────────────────────────────────
+       ROOM 1 FURNITURE
+       Robot starts at (0.5, 0.0). Furniture placed to constrain paths
+       but leave the central corridor (y ≈ 0) clear for navigation.
+
+       Table: 1.2×0.7×0.75m box — pose z = height/2 = 0.375 so bottom
+              touches ground. Same rule applies to all furniture below.
+  ───────────────────────────────────────────────────────────────── -->
+
+  <!-- Dining table in south half of Room 1 -->
+  <model name="r1_table">
+    <static>true</static>
+    <pose>2.5 -2.2 0.375 0 0 0</pose>
+    <link name="link">
+      <collision name="collision">
+        <geometry><box><size>1.2 0.7 0.75</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>1.2 0.7 0.75</size></box></geometry>
+        <!-- Wood-brown color -->
+        <material><ambient>0.55 0.35 0.15 1</ambient><diffuse>0.55 0.35 0.15 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <model name="r1_chair_a">
+    <static>true</static>
+    <pose>1.8 -3.2 0.425 0 0 0</pose>
+    <link name="link">
+      <collision name="collision">
+        <geometry><box><size>0.45 0.45 0.85</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.45 0.45 0.85</size></box></geometry>
+        <material><ambient>0.7 0.5 0.25 1</ambient><diffuse>0.7 0.5 0.25 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <model name="r1_chair_b">
+    <static>true</static>
+    <pose>3.2 -3.2 0.425 0 0 0</pose>
+    <link name="link">
+      <collision name="collision">
+        <geometry><box><size>0.45 0.45 0.85</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.45 0.45 0.85</size></box></geometry>
+        <material><ambient>0.7 0.5 0.25 1</ambient><diffuse>0.7 0.5 0.25 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <!-- Couch in north half of Room 1 — placed against north wall -->
+  <model name="r1_couch">
+    <static>true</static>
+    <pose>3.0 3.5 0.425 0 0 0</pose>
+    <link name="link">
+      <collision name="collision">
+        <!-- Couch is wide (along X) and shallow (Y), tall (Z) -->
+        <geometry><box><size>1.8 0.8 0.85</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>1.8 0.8 0.85</size></box></geometry>
+        <!-- Blue-grey upholstery -->
+        <material><ambient>0.25 0.35 0.6 1</ambient><diffuse>0.25 0.35 0.6 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <!-- ─────────────────────────────────────────────────────────────────
+       ROOM 2 FURNITURE
+       Navigation enters from the doorway at (5.5, 0) and sweeps
+       through the room. Furniture kept in south and far-north areas.
+  ───────────────────────────────────────────────────────────────── -->
+
+  <model name="r2_table">
+    <static>true</static>
+    <pose>7.0 -2.2 0.375 0 0 0</pose>
+    <link name="link">
+      <collision name="collision">
+        <geometry><box><size>1.2 0.7 0.75</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>1.2 0.7 0.75</size></box></geometry>
+        <material><ambient>0.55 0.35 0.15 1</ambient><diffuse>0.55 0.35 0.15 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <model name="r2_chair_a">
+    <static>true</static>
+    <pose>6.3 -3.2 0.425 0 0 0</pose>
+    <link name="link">
+      <collision name="collision">
+        <geometry><box><size>0.45 0.45 0.85</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.45 0.45 0.85</size></box></geometry>
+        <material><ambient>0.7 0.5 0.25 1</ambient><diffuse>0.7 0.5 0.25 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <model name="r2_chair_b">
+    <static>true</static>
+    <pose>7.7 -3.2 0.425 0 0 0</pose>
+    <link name="link">
+      <collision name="collision">
+        <geometry><box><size>0.45 0.45 0.85</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.45 0.45 0.85</size></box></geometry>
+        <material><ambient>0.7 0.5 0.25 1</ambient><diffuse>0.7 0.5 0.25 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <!-- Shelf in Room 2 — against the east wall (x ≈ 9.5) -->
+  <model name="r2_shelf">
+    <static>true</static>
+    <!-- x=9.1: shelf east face at 9.1+0.2=9.3, 0.2m from east wall interior face ✓ -->
+    <pose>9.1 2.5 0.9 0 0 0</pose>
+    <link name="link">
+      <collision name="collision">
+        <!-- Depth 0.4m (X), Width 1.5m (Y), Height 1.8m (Z) -->
+        <geometry><box><size>0.4 1.5 1.8</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.4 1.5 1.8</size></box></geometry>
+        <!-- Dark wood -->
+        <material><ambient>0.4 0.25 0.1 1</ambient><diffuse>0.4 0.25 0.1 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <!-- ─────────────────────────────────────────────────────────────────
+       COLLECTION BOX
+       An open-top hollow box near the robot's start position.
+       Objects the robot picks up are deposited here.
+
+       Implementation: 5 separate static models (floor + 4 walls).
+       SDF has no subtraction/hollow geometry — the only way to make
+       an open-top box is to assemble it from flat panels.
+
+       Outer dimensions: 0.7m × 0.7m × 0.45m
+       Wall thickness: 0.02m
+       Center position: (1.5, 2.0) in world frame
+
+       Panel center calculations:
+         box_center = (1.5, 2.0),  half_outer = 0.35,  half_wall = 0.01
+         North y = 2.0 + 0.35 - 0.01 = 2.34
+         South y = 2.0 - 0.35 + 0.01 = 1.66
+         East  x = 1.5 + 0.35 - 0.01 = 1.84
+         West  x = 1.5 - 0.35 + 0.01 = 1.16
+         Wall height center z = 0.45/2 = 0.225
+  ───────────────────────────────────────────────────────────────── -->
+
+  <model name="box_floor">
+    <static>true</static>
+    <pose>1.5 2.0 0.01 0 0 0</pose>
+    <link name="link">
+      <collision name="collision">
+        <geometry><box><size>0.70 0.70 0.02</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.70 0.70 0.02</size></box></geometry>
+        <material><ambient>0.15 0.6 0.15 1</ambient><diffuse>0.15 0.6 0.15 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <model name="box_wall_north">
+    <static>true</static>
+    <pose>1.5 2.34 0.225 0 0 0</pose>
+    <link name="link">
+      <collision name="collision">
+        <geometry><box><size>0.70 0.02 0.45</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.70 0.02 0.45</size></box></geometry>
+        <material><ambient>0.15 0.6 0.15 1</ambient><diffuse>0.15 0.6 0.15 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <model name="box_wall_south">
+    <static>true</static>
+    <pose>1.5 1.66 0.225 0 0 0</pose>
+    <link name="link">
+      <collision name="collision">
+        <geometry><box><size>0.70 0.02 0.45</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.70 0.02 0.45</size></box></geometry>
+        <material><ambient>0.15 0.6 0.15 1</ambient><diffuse>0.15 0.6 0.15 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <model name="box_wall_east">
+    <static>true</static>
+    <pose>1.84 2.0 0.225 0 0 0</pose>
+    <link name="link">
+      <collision name="collision">
+        <geometry><box><size>0.02 0.70 0.45</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.02 0.70 0.45</size></box></geometry>
+        <material><ambient>0.15 0.6 0.15 1</ambient><diffuse>0.15 0.6 0.15 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <model name="box_wall_west">
+    <static>true</static>
+    <pose>1.16 2.0 0.225 0 0 0</pose>
+    <link name="link">
+      <collision name="collision">
+        <geometry><box><size>0.02 0.70 0.45</size></box></geometry>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.02 0.70 0.45</size></box></geometry>
+        <material><ambient>0.15 0.6 0.15 1</ambient><diffuse>0.15 0.6 0.15 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <!-- ─────────────────────────────────────────────────────────────────
+       PICKUP OBJECTS (6 dynamic models)
+       These are the items the robot must collect.
+
+       WHY dynamic (not static)?
+         Static models are pinned to the world — the physics engine never
+         moves them. We need these to be picked up, moved, and dropped
+         into the collection box, so they must respond to forces.
+
+       INERTIA CALCULATION (required for all dynamic models):
+         Bad inertia = robot explodes on contact or objects phase through floor.
+
+         Cylinder (r=0.04m, h=0.08m, mass=0.3kg):
+           ixx = iyy = m/12*(3r²+h²) = 0.3/12*(3×0.0016+0.0064) = 0.000280 kg·m²
+           izz        = m/2*r²        = 0.3/2*0.0016              = 0.000240 kg·m²
+
+         Box (0.08×0.08×0.08m cube, mass=0.3kg):
+           ixx=iyy=izz = m/12*(s²+s²) = 0.3/12*(0.0064+0.0064)   = 0.000320 kg·m²
+
+       POSE: z = cylinder_radius (0.04) so bottom of object touches ground.
+             For a cube: z = half_side = 0.04.
+
+       SURFACE FRICTION: objects need enough friction to not slide away
+         when the robot brushes against them, but not so much that they
+         can't be pushed into position.
+  ───────────────────────────────────────────────────────────────── -->
+
+  <!-- Room 1 objects -->
+  <model name="obj_red">
+    <pose>3.0 1.0 0.04 0 0 0</pose>
+    <link name="link">
+      <inertial>
+        <mass>0.3</mass>
+        <inertia><ixx>0.000280</ixx><iyy>0.000280</iyy><izz>0.000240</izz>
+                 <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+      </inertial>
+      <collision name="collision">
+        <geometry><cylinder><radius>0.04</radius><length>0.08</length></cylinder></geometry>
+        <surface>
+          <friction><ode><mu>0.5</mu><mu2>0.5</mu2></ode></friction>
+          <contact><ode><kp>1e5</kp><kd>10</kd></ode></contact>
+        </surface>
+      </collision>
+      <visual name="visual">
+        <geometry><cylinder><radius>0.04</radius><length>0.08</length></cylinder></geometry>
+        <material><ambient>0.9 0.1 0.1 1</ambient><diffuse>0.9 0.1 0.1 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <model name="obj_green">
+    <pose>1.5 -1.0 0.04 0 0 0</pose>
+    <link name="link">
+      <inertial>
+        <mass>0.3</mass>
+        <inertia><ixx>0.000280</ixx><iyy>0.000280</iyy><izz>0.000240</izz>
+                 <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+      </inertial>
+      <collision name="collision">
+        <geometry><cylinder><radius>0.04</radius><length>0.08</length></cylinder></geometry>
+        <surface>
+          <friction><ode><mu>0.5</mu><mu2>0.5</mu2></ode></friction>
+          <contact><ode><kp>1e5</kp><kd>10</kd></ode></contact>
+        </surface>
+      </collision>
+      <visual name="visual">
+        <geometry><cylinder><radius>0.04</radius><length>0.08</length></cylinder></geometry>
+        <material><ambient>0.1 0.8 0.1 1</ambient><diffuse>0.1 0.8 0.1 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <!-- Blue box — near doorway approach path -->
+  <model name="obj_blue">
+    <!-- Box cube: z=0.04 = half of 0.08m side length -->
+    <pose>4.0 -0.5 0.04 0 0 0</pose>
+    <link name="link">
+      <inertial>
+        <mass>0.3</mass>
+        <inertia><ixx>0.000320</ixx><iyy>0.000320</iyy><izz>0.000320</izz>
+                 <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+      </inertial>
+      <collision name="collision">
+        <geometry><box><size>0.08 0.08 0.08</size></box></geometry>
+        <surface>
+          <friction><ode><mu>0.5</mu><mu2>0.5</mu2></ode></friction>
+          <contact><ode><kp>1e5</kp><kd>10</kd></ode></contact>
+        </surface>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.08 0.08 0.08</size></box></geometry>
+        <material><ambient>0.1 0.2 0.9 1</ambient><diffuse>0.1 0.2 0.9 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <!-- Room 2 objects -->
+  <model name="obj_yellow">
+    <pose>6.0 2.0 0.04 0 0 0</pose>
+    <link name="link">
+      <inertial>
+        <mass>0.3</mass>
+        <inertia><ixx>0.000280</ixx><iyy>0.000280</iyy><izz>0.000240</izz>
+                 <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+      </inertial>
+      <collision name="collision">
+        <geometry><cylinder><radius>0.04</radius><length>0.08</length></cylinder></geometry>
+        <surface>
+          <friction><ode><mu>0.5</mu><mu2>0.5</mu2></ode></friction>
+          <contact><ode><kp>1e5</kp><kd>10</kd></ode></contact>
+        </surface>
+      </collision>
+      <visual name="visual">
+        <geometry><cylinder><radius>0.04</radius><length>0.08</length></cylinder></geometry>
+        <material><ambient>0.9 0.85 0.1 1</ambient><diffuse>0.9 0.85 0.1 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <model name="obj_purple">
+    <pose>8.0 -1.5 0.04 0 0 0</pose>
+    <link name="link">
+      <inertial>
+        <mass>0.3</mass>
+        <inertia><ixx>0.000280</ixx><iyy>0.000280</iyy><izz>0.000240</izz>
+                 <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+      </inertial>
+      <collision name="collision">
+        <geometry><cylinder><radius>0.04</radius><length>0.08</length></cylinder></geometry>
+        <surface>
+          <friction><ode><mu>0.5</mu><mu2>0.5</mu2></ode></friction>
+          <contact><ode><kp>1e5</kp><kd>10</kd></ode></contact>
+        </surface>
+      </collision>
+      <visual name="visual">
+        <geometry><cylinder><radius>0.04</radius><length>0.08</length></cylinder></geometry>
+        <material><ambient>0.6 0.1 0.7 1</ambient><diffuse>0.6 0.1 0.7 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <!-- Orange box — Room 2 north area -->
+  <model name="obj_orange">
+    <pose>7.0 1.5 0.04 0 0 0</pose>
+    <link name="link">
+      <inertial>
+        <mass>0.3</mass>
+        <inertia><ixx>0.000320</ixx><iyy>0.000320</iyy><izz>0.000320</izz>
+                 <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+      </inertial>
+      <collision name="collision">
+        <geometry><box><size>0.08 0.08 0.08</size></box></geometry>
+        <surface>
+          <friction><ode><mu>0.5</mu><mu2>0.5</mu2></ode></friction>
+          <contact><ode><kp>1e5</kp><kd>10</kd></ode></contact>
+        </surface>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.08 0.08 0.08</size></box></geometry>
+        <material><ambient>0.95 0.5 0.05 1</ambient><diffuse>0.95 0.5 0.05 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
 
 </world>
 </sdf>
