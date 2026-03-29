@@ -1,0 +1,92 @@
+# bridge.yaml — ROS 2 ↔ Ignition Gazebo topic bridge configuration.
+#
+# Each entry maps one topic between the two systems.
+# Fields:
+#   ros_topic_name: the name as seen in "ros2 topic list"
+#   gz_topic_name:  the name as seen in "ign topic -l" (Ignition side)
+#   ros_type_name:  ROS 2 message type
+#   gz_type_name:   Ignition protobuf message type
+#   direction:
+#     ROS_TO_GZ    = ROS node publishes → Ignition plugin subscribes
+#     GZ_TO_ROS    = Ignition plugin publishes → ROS node subscribes
+#     BIDIRECTIONAL = both directions
+#
+
+
+#  DRIVE COMMAND 
+# Our navigator publishes Twist to /cmd_vel.
+# The DiffDrive plugin in the URDF subscribes to /cmd_vel on the Ignition side.
+- ros_topic_name: "/cmd_vel"
+  gz_topic_name:  "/cmd_vel"
+  ros_type_name:  "geometry_msgs/msg/Twist"
+  gz_type_name:   "ignition.msgs.Twist"
+  direction: ROS_TO_GZ
+
+
+#  ODOMETRY ─
+# DiffDrive plugin publishes wheel odometry (estimated position + velocity).
+# Our navigator and logger nodes subscribe to this.
+- ros_topic_name: "/odom"
+  gz_topic_name:  "/odom"
+  ros_type_name:  "nav_msgs/msg/Odometry"
+  gz_type_name:   "ignition.msgs.Odometry"
+  direction: GZ_TO_ROS
+
+
+#  TF (TRANSFORM TREE) 
+# DiffDrive also publishes the odom→base_link transform so navigation
+# tools know where the robot is in the world frame.
+# robot_state_publisher handles the URDF-derived transforms (base_link→wheels etc.)
+- ros_topic_name: "/tf"
+  gz_topic_name:  "/tf"
+  ros_type_name:  "tf2_msgs/msg/TFMessage"
+  gz_type_name:   "ignition.msgs.Pose_V"
+  direction: GZ_TO_ROS
+
+
+#  SIMULATION CLOCK ─
+# All our nodes are launched with use_sim_time:=true (see launch file).
+- ros_topic_name: "/clock"
+  gz_topic_name:  "/clock"
+  ros_type_name:  "rosgraph_msgs/msg/Clock"
+  gz_type_name:   "ignition.msgs.Clock"
+  direction: GZ_TO_ROS
+
+
+#  JOINT STATES ─
+# robot_state_publisher uses these to compute link-to-link TF transforms,
+# which RViz needs to display the robot correctly.
+- ros_topic_name: "/joint_states"
+  gz_topic_name:  "/joint_states"
+  ros_type_name:  "sensor_msgs/msg/JointState"
+  gz_type_name:   "ignition.msgs.Model"
+  direction: GZ_TO_ROS
+
+
+# ── PHASE 2: SENSOR TOPICS (active) ───────────────────────────────────────
+#
+# Why these needed activating: sensor topics only exist once the URDF has the
+# sensor links + the Sensors plugin. Adding them before Phase 2 would cause
+# the bridge to print "topic not found" warnings and fail to start cleanly.
+
+# LiDAR scans (from gpu_lidar sensor on lidar_link):
+- ros_topic_name: "/scan"
+  gz_topic_name:  "/scan"
+  ros_type_name:  "sensor_msgs/msg/LaserScan"
+  gz_type_name:   "ignition.msgs.LaserScan"
+  direction: GZ_TO_ROS
+
+# Camera images (from camera sensor on camera_link):
+- ros_topic_name: "/camera/image_raw"
+  gz_topic_name:  "/camera/image_raw"
+  ros_type_name:  "sensor_msgs/msg/Image"
+  gz_type_name:   "ignition.msgs.Image"
+  direction: GZ_TO_ROS
+
+# Camera calibration info.
+# Ignition publishes this at <image_topic>/camera_info automatically:
+- ros_topic_name: "/camera/camera_info"
+  gz_topic_name:  "/camera/image_raw/camera_info"
+  ros_type_name:  "sensor_msgs/msg/CameraInfo"
+  gz_type_name:   "ignition.msgs.CameraInfo"
+  direction: GZ_TO_ROS
