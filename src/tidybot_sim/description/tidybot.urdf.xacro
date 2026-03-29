@@ -1,0 +1,237 @@
+<?xml version="1.0"?>
+<!--
+  tidybot.urdf.xacro — Complete robot description.
+
+  PHASE 1: base_link + 4 wheels + DiffDrive plugin.
+  Later phases add: torso, arms, sensors, face panel.
+
+  URDF structure: a tree of links (rigid bodies) joined by joints.
+  Every chain starts at base_link (the root, with no parent).
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="tidybot">
+
+  <!-- 
+       INERTIA HELPER MACROS
+       Computing inertia tensors by hand is error-prone.
+       These macros embed the formulas so the math is self-documenting.
+
+       For a solid box (x_len × y_len × z_len, mass m):
+         ixx = m/12 * (y² + z²)
+         iyy = m/12 * (x² + z²)
+         izz = m/12 * (x² + y²)
+
+       For a solid cylinder (radius r, height h, mass m),
+       axis along Z:
+         ixx = iyy = m/12 * (3r² + h²)
+         izz = m/2 * r² -->
+
+  <xacro:macro name="inertia_box" params="m x y z">
+    <inertial>
+      <mass value="${m}"/>
+      <inertia
+        ixx="${m/12.0 * (y*y + z*z)}"
+        iyy="${m/12.0 * (x*x + z*z)}"
+        izz="${m/12.0 * (x*x + y*y)}"
+        ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </xacro:macro>
+
+  <xacro:macro name="inertia_cylinder" params="m r h">
+    <inertial>
+      <mass value="${m}"/>
+      <inertia
+        ixx="${m/12.0 * (3*r*r + h*h)}"
+        iyy="${m/12.0 * (3*r*r + h*h)}"
+        izz="${m/2.0 * r*r}"
+        ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </xacro:macro>
+
+  <!-- ROBOT DIMENSIONS -->
+
+  <!-- Base chassis -->
+  <xacro:property name="base_x"    value="0.50"/>  <!-- length front-to-back -->
+  <xacro:property name="base_y"    value="0.48"/>  <!-- width side-to-side -->
+  <xacro:property name="base_z"    value="0.12"/>  <!-- height -->
+  <xacro:property name="base_mass" value="8.0"/>
+
+  <!-- Wheels: cylinders lying on their side -->
+  <xacro:property name="wheel_r"      value="0.08"/>  <!-- radius -->
+  <xacro:property name="wheel_h"      value="0.05"/>  <!-- width (cylinder height) -->
+  <xacro:property name="wheel_mass"   value="0.6"/>
+  <!-- Wheel x offset from base_link center (front/rear) -->
+  <xacro:property name="wheel_x_off"  value="0.15"/>
+  <!-- Wheel y offset: base half-width + wheel half-width + tiny clearance -->
+  <xacro:property name="wheel_y_off"  value="${base_y/2.0 + wheel_h/2.0 + 0.005}"/>
+  <!-- Wheel z offset: we spawn base_link at z=0.13, wheels should sit on ground (z=0.08) -->
+  <!-- z_offset = wheel_ground_height - spawn_height = 0.08 - 0.13 = -0.05 -->
+  <xacro:property name="wheel_z_off"  value="-0.05"/>
+  <!-- Wheel separation for DiffDrive plugin -->
+  <xacro:property name="wheel_sep"    value="${wheel_y_off * 2.0}"/>
+
+  <!-- MATERIALS -->
+
+  <material name="dark_grey">
+    <color rgba="0.2 0.2 0.2 1.0"/>
+  </material>
+  <material name="wheel_black">
+    <color rgba="0.1 0.1 0.1 1.0"/>
+  </material>
+
+  <!-- BASE LINK
+       This is the root of the robot's kinematic tree. All other links
+       hang off this one. Its origin is at the geometric center of the
+       chassis box. -->
+
+  <link name="base_link">
+    <!-- Visual: what you see in Gazebo -->
+    <visual>
+      <geometry>
+        <box size="${base_x} ${base_y} ${base_z}"/>
+      </geometry>
+      <material name="dark_grey"/>
+    </visual>
+
+    <!-- Collision: what the physics engine uses for contact detection.
+         Must match (or be simpler than) the visual. Mismatch causes
+         the robot to hover or sink into surfaces. -->
+    <collision>
+      <geometry>
+        <box size="${base_x} ${base_y} ${base_z}"/>
+      </geometry>
+    </collision>
+
+    <!-- Inertial: required for physics simulation.
+         Without this, Gazebo treats the link as massless and it
+         behaves unpredictably (often explodes or falls through floor). -->
+    <xacro:inertia_box m="${base_mass}" x="${base_x}" y="${base_y}" z="${base_z}"/>
+  </link>
+
+  <!-- WHEEL MACRO
+       Creates one wheel link + its joint to base_link.
+
+       params:
+         name  — link/joint name prefix (e.g. "front_left_wheel")
+         x_sgn — +1 for front, -1 for rear
+         y_sgn — +1 for left, -1 for right -->
+
+  <xacro:macro name="wheel" params="name x_sgn y_sgn">
+
+    <link name="${name}">
+      <visual>
+        <!-- rpy="1.5707 0 0" rotates the cylinder 90° around X,
+             turning it from vertical to horizontal (lying on its side) -->
+        <origin xyz="0 0 0" rpy="1.5707 0 0"/>
+        <geometry>
+          <cylinder radius="${wheel_r}" length="${wheel_h}"/>
+        </geometry>
+        <material name="wheel_black"/>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="1.5707 0 0"/>
+        <geometry>
+          <cylinder radius="${wheel_r}" length="${wheel_h}"/>
+        </geometry>
+      </collision>
+      <xacro:inertia_cylinder m="${wheel_mass}" r="${wheel_r}" h="${wheel_h}"/>
+    </link>
+
+    <!-- continuous joint = can spin forever (no limits), like a real wheel -->
+    <joint name="${name}_joint" type="continuous">
+      <parent link="base_link"/>
+      <child  link="${name}"/>
+      <!-- Position the wheel at the correct corner of the chassis -->
+      <origin xyz="${x_sgn * wheel_x_off}  ${y_sgn * wheel_y_off}  ${wheel_z_off}"
+              rpy="0 0 0"/>
+      <!-- Rolling axis: Y-axis in the parent (base_link) frame -->
+      <axis xyz="0 1 0"/>
+      <!-- damping: resists spinning (like axle friction), prevents runaway spin
+           friction: static friction in the joint itself -->
+      <dynamics damping="0.5" friction="0.2"/>
+    </joint>
+
+    <!-- Gazebo-specific friction for the wheel CONTACT surface.
+         mu1/mu2: Coulomb friction coefficients (0=ice, 1=rubber on asphalt)
+         slip1/slip2: small slip values prevent locking on turning
+         fdir1: primary friction direction (forward = X axis) -->
+    <gazebo reference="${name}">
+      <mu1>0.8</mu1>
+      <mu2>0.8</mu2>
+      <slip1>0.02</slip1>
+      <slip2>0.0</slip2>
+      <fdir1>1 0 0</fdir1>
+      <!-- kp/kd: contact stiffness/damping — prevents wheels sinking into floor -->
+      <kp>1e6</kp>
+      <kd>100</kd>
+    </gazebo>
+
+  </xacro:macro>
+
+  <!-- Instantiate all 4 wheels using the macro.
+       x_sgn: +1=front, -1=rear | y_sgn: +1=left, -1=right -->
+  <xacro:wheel name="front_left_wheel"  x_sgn=" 1" y_sgn=" 1"/>
+  <xacro:wheel name="front_right_wheel" x_sgn=" 1" y_sgn="-1"/>
+  <xacro:wheel name="rear_left_wheel"   x_sgn="-1" y_sgn=" 1"/>
+  <xacro:wheel name="rear_right_wheel"  x_sgn="-1" y_sgn="-1"/>
+
+  <!-- DIFF DRIVE PLUGIN (skid-steer)
+       This is the motor controller. It receives geometry_msgs/Twist
+       on /cmd_vel (linear.x = forward speed, angular.z = turn rate)
+       and converts it to individual wheel velocities.
+
+       For 4-wheel skid steer: both left wheels get the same command,
+       both right wheels get the same command. This is identical to
+       differential drive but with 2 joints per side instead of 1.
+       Ignition's DiffDrive plugin supports multiple joints per side. -->
+
+  <gazebo>
+    <plugin filename="ignition-gazebo-diff-drive-system"
+            name="ignition::gazebo::systems::DiffDrive">
+
+      <!-- Left side: both wheels receive the same velocity command -->
+      <left_joint>front_left_wheel_joint</left_joint>
+      <left_joint>rear_left_wheel_joint</left_joint>
+
+      <!-- Right side: both wheels receive the same velocity command -->
+      <right_joint>front_right_wheel_joint</right_joint>
+      <right_joint>rear_right_wheel_joint</right_joint>
+
+      <!-- Physical geometry: used to convert Twist → wheel rad/s -->
+      <wheel_separation>${wheel_sep}</wheel_separation>
+      <wheel_radius>${wheel_r}</wheel_radius>
+
+      <!-- Topic names. Leading "/" makes them absolute in Ignition's
+           topic namespace (not prefixed with /model/tidybot/).
+           This simplifies the bridge config. -->
+      <topic>/cmd_vel</topic>
+      <odom_topic>/odom</odom_topic>
+      <tf_topic>/tf</tf_topic>
+
+      <!-- TF frame names: odom → base_link transform for navigation -->
+      <frame_id>odom</frame_id>
+      <child_frame_id>base_link</child_frame_id>
+
+      <!-- Odometry publish rate (Hz) -->
+      <odom_publish_frequency>20</odom_publish_frequency>
+
+      <!-- Safety limits: prevents runaway from bad commands -->
+      <max_linear_velocity>0.6</max_linear_velocity>
+      <max_angular_velocity>1.2</max_angular_velocity>
+
+    </plugin>
+  </gazebo>
+
+  <!-- JOINT STATE PUBLISHER PLUGIN
+       Publishes the current angle/position of every joint to /joint_states.
+       robot_state_publisher reads this to compute and broadcast TF transforms
+       for every link in the URDF tree.
+       Without this: RViz shows the robot in its zero-configuration forever. -->
+
+  <gazebo>
+    <plugin filename="ignition-gazebo-joint-state-publisher-system"
+            name="ignition::gazebo::systems::JointStatePublisher">
+      <topic>/joint_states</topic>
+    </plugin>
+  </gazebo>
+
+</robot>
