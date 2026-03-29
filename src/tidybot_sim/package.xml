@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<!--
+  package.xml — the identity card for every ROS 2 package.
+
+  format="3" is the current standard (ROS 2 Humble+).
+
+  There are three kinds of dependencies:
+    <depend>          = needed at build-time AND runtime (most common)
+    <build_depend>    = only needed to compile/build
+    <exec_depend>     = only needed at runtime
+
+  <build_type>ament_python</build_type> means colcon will treat this as a
+  pure Python package (no C++ compilation). The alternative is ament_cmake
+  for C++ packages.
+-->
+<package format="3">
+  <name>tidybot_sim</name>
+  <version>0.1.0</version>
+  <description>
+    Home-tidying robot simulation: URDF model, Gazebo world, and autonomous
+    navigation behavior. Drift internship assignment.
+  </description>
+  <maintainer email="you@example.com">Your Name</maintainer>
+  <license>MIT</license>
+
+  <!-- Build system: pure Python, no CMake needed -->
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <!-- URDF/xacro processing -->
+  <depend>xacro</depend>
+
+  <!-- Publishes TF tree from URDF joint definitions -->
+  <depend>robot_state_publisher</depend>
+
+  <!-- Gazebo integration: launches Ignition Gazebo, spawns models -->
+  <depend>ros_gz_sim</depend>
+
+  <!-- Bridges ROS 2 topics to/from Ignition Gazebo topics -->
+  <depend>ros_gz_bridge</depend>
+
+  <!-- Python message types used by our nodes -->
+  <depend>rclpy</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>rosgraph_msgs</depend>
+  <depend>tf2_msgs</depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

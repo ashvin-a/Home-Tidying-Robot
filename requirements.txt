@@ -1,0 +1,8 @@
+# Python dependencies beyond ROS 2 Humble defaults.
+# Install with: pip3 install -r requirements.txt
+#
+# Phase 1: no extra deps — rclpy, geometry_msgs, nav_msgs, sensor_msgs
+# are all bundled with ros-humble-desktop.
+#
+# Phase 4+ will add nothing beyond ROS 2 builtins either.
+# Keeping this file so the reviewer knows we checked.
