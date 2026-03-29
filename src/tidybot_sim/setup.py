@@ -37,7 +37,7 @@ setup(
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='Ashvin Anilkumar',
-    maintainer_email='anshvinanilkumarsh@gmail.com',
+    maintainer_email='ashvinanilkumarsh@gmail.com',
     description='Home-tidying robot simulation (Drift assignment)',
     license='MIT',
     # Console scripts: maps a CLI command name to a Python function.
