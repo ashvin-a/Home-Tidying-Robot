@@ -1,0 +1,205 @@
+<?xml version="1.0"?>
+<!--
+  home.sdf — The simulation world.
+  PHASE 1: ground plane + outer boundary walls + lighting + physics config.
+           Full two-room layout (walls, doorway, furniture, objects)
+           comes in Phase 3.-->
+<sdf version="1.9">
+<world name="home">
+
+  <!-- 
+       PHYSICS CONFIGURATION
+       type="ignored" means "let the physics engine decide which solver
+       to use" — the <physics> block still sets the parameters.
+
+       max_step_size: the physics timestep in seconds.
+         Smaller = more accurate but slower. 4ms is a good balance.
+         Too large (>10ms) causes robots to pass through walls.
+         Too small (<1ms) makes real-time factor drop below 1.0.
+
+       real_time_factor: 1.0 = simulation runs at wall-clock speed.
+         <1.0 means simulation is slower than real time (overloaded).
+   -->
+  <physics name="4ms" type="ignored">
+    <max_step_size>0.004</max_step_size>
+    <real_time_factor>1.0</real_time_factor>
+    <gravity>0 0 -9.81</gravity>
+  </physics>
+
+  <!-- 
+       MANDATORY WORLD PLUGINS
+       Filename pattern: "ignition-gazebo-*-system"
+       Ignition's plugin loader finds libignition-gazebo6-*-system.so
+   -->
+  <plugin filename="ignition-gazebo-physics-system"
+          name="ignition::gazebo::systems::Physics"/>
+
+  <plugin filename="ignition-gazebo-user-commands-system"
+          name="ignition::gazebo::systems::UserCommands"/>
+
+  <plugin filename="ignition-gazebo-scene-broadcaster-system"
+          name="ignition::gazebo::systems::SceneBroadcaster"/>
+
+  <!-- LIGHTING-->
+  <light name="sun" type="directional">
+    <cast_shadows>true</cast_shadows>
+    <pose>0 0 10 0 0 0</pose>
+    <diffuse>0.85 0.85 0.85 1</diffuse>
+    <specular>0.2 0.2 0.2 1</specular>
+    <direction>-0.5 0.1 -0.9</direction>
+  </light>
+
+  <!-- Softer ambient fill light to avoid pitch-black shadows -->
+  <light name="ambient_fill" type="directional">
+    <cast_shadows>false</cast_shadows>
+    <pose>0 0 10 0 0 0</pose>
+    <diffuse>0.3 0.3 0.35 1</diffuse>
+    <specular>0.0 0.0 0.0 1</specular>
+    <direction>0.5 -0.1 -0.5</direction>
+  </light>
+
+  <!-- GROUND PLANE
+       A static model with plane collision + visual geometry.
+       IMPORTANT: We define friction here, not relying on the default-->
+  <model name="ground_plane">
+    <static>true</static>
+    <link name="link">
+
+      <collision name="collision">
+        <geometry>
+          <!-- A plane is infinite in collision but we give it a visual size -->
+          <plane>
+            <normal>0 0 1</normal>   <!-- pointing up = horizontal floor -->
+            <size>30 30</size>
+          </plane>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <!-- mu: Coulomb friction (0.8 = decent grip, like rubber on concrete)
+                   This is what makes wheels actually propel the robot forward.
+                   Zero friction = wheels spin, robot doesn't move. -->
+              <mu>0.8</mu>
+              <mu2>0.8</mu2>
+            </ode>
+          </friction>
+          <contact>
+            <ode>
+              <!-- Stiffness and damping for the contact model.
+                   Without these, objects may bounce or sink into the floor. -->
+              <kp>1e6</kp>
+              <kd>100.0</kd>
+            </ode>
+          </contact>
+        </surface>
+      </collision>
+
+      <visual name="visual">
+        <geometry>
+          <plane>
+            <normal>0 0 1</normal>
+            <size>30 30</size>
+          </plane>
+        </geometry>
+        <material>
+          <ambient>0.7 0.7 0.7 1</ambient>
+          <diffuse>0.7 0.7 0.7 1</diffuse>
+        </material>
+      </visual>
+
+    </link>
+  </model>
+
+  <!-- 
+       WALL HELPER: we define walls as static box models.
+       Each wall has:
+         pose: center position (x y z roll pitch yaw)
+         size: (length thickness height)
+
+       Wall layout for Phase 1: simple outer perimeter of one large room.
+       Phase 3 splits this into two rooms with a doorway.
+
+       Room boundary: 10m wide × 9m deep
+       Wall thickness: 0.15m
+       Wall height: 2.4m
+   -->
+
+  <!-- Reusable wall material -->
+  <!-- (SDF doesn't support macros — we repeat the material block.
+       In Phase 3 we'll have more walls but the structure is the same.) -->
+
+  <!-- South wall (runs along X axis at y = -4.5) -->
+  <model name="wall_south">
+    <static>true</static>
+    <!-- pose: cx cy cz roll pitch yaw — center of the box -->
+    <pose>4.75 -4.575 1.2 0 0 0</pose>
+    <link name="link">
+      <collision name="collision">
+        <geometry><box><size>9.65 0.15 2.4</size></box></geometry>
+        <surface><friction><ode><mu>0.6</mu><mu2>0.6</mu2></ode></friction></surface>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>9.65 0.15 2.4</size></box></geometry>
+        <material><ambient>0.9 0.9 0.88 1</ambient><diffuse>0.9 0.9 0.88 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <!-- North wall (runs along X axis at y = +4.5) -->
+  <model name="wall_north">
+    <static>true</static>
+    <pose>4.75 4.575 1.2 0 0 0</pose>
+    <link name="link">
+      <collision name="collision">
+        <geometry><box><size>9.65 0.15 2.4</size></box></geometry>
+        <surface><friction><ode><mu>0.6</mu><mu2>0.6</mu2></ode></friction></surface>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>9.65 0.15 2.4</size></box></geometry>
+        <material><ambient>0.9 0.9 0.88 1</ambient><diffuse>0.9 0.9 0.88 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <!-- West wall (runs along Y axis at x = -0.075) -->
+  <model name="wall_west">
+    <static>true</static>
+    <pose>-0.075 0 1.2 0 0 0</pose>
+    <link name="link">
+      <collision name="collision">
+        <geometry><box><size>0.15 9.0 2.4</size></box></geometry>
+        <surface><friction><ode><mu>0.6</mu><mu2>0.6</mu2></ode></friction></surface>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.15 9.0 2.4</size></box></geometry>
+        <material><ambient>0.9 0.9 0.88 1</ambient><diffuse>0.9 0.9 0.88 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <!-- East wall (runs along Y axis at x = 9.575) -->
+  <model name="wall_east">
+    <static>true</static>
+    <pose>9.575 0 1.2 0 0 0</pose>
+    <link name="link">
+      <collision name="collision">
+        <geometry><box><size>0.15 9.0 2.4</size></box></geometry>
+        <surface><friction><ode><mu>0.6</mu><mu2>0.6</mu2></ode></friction></surface>
+      </collision>
+      <visual name="visual">
+        <geometry><box><size>0.15 9.0 2.4</size></box></geometry>
+        <material><ambient>0.9 0.9 0.88 1</ambient><diffuse>0.9 0.9 0.88 1</diffuse></material>
+      </visual>
+    </link>
+  </model>
+
+  <!--
+    Phase 3 will add:
+      - Internal dividing wall with doorway (creating Room 1 + Room 2)
+      - Furniture: tables, chairs, couch, shelf
+      - 6 pickup objects (dynamic cylinders/boxes)
+      - Collection box (hollow static shell)
+  -->
+
+</world>
+</sdf>
