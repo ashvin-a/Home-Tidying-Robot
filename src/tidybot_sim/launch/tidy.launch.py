@@ -13,6 +13,7 @@ from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
     IncludeLaunchDescription,
+    SetEnvironmentVariable,
     TimerAction,
 )
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -36,6 +37,9 @@ def generate_launch_description():
     world_path  = os.path.join(pkg, 'worlds', 'home.sdf')
     xacro_path  = os.path.join(pkg, 'description', 'tidybot.urdf.xacro')
     bridge_path = os.path.join(pkg, 'config', 'bridge.yaml')
+
+    set_sw_render  = SetEnvironmentVariable('LIBGL_ALWAYS_SOFTWARE', '1')
+    set_gl_version = SetEnvironmentVariable('MESA_GL_VERSION_OVERRIDE', '3.3')
 
     # ── LAUNCH ARGUMENTS ───────────
     # These let the reviewer override defaults without editing source:
@@ -201,6 +205,8 @@ def generate_launch_description():
         declare_robot_x,
         declare_robot_y,
 
+        set_sw_render,
+        set_gl_version,
         gz_sim,               # starts immediately
         robot_state_publisher, # starts immediately
         bridge,               # starts immediately
