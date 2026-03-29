@@ -2,11 +2,28 @@
 <!--
   tidybot.urdf.xacro — Complete robot description.
 
-  PHASE 1: base_link + 4 wheels + DiffDrive plugin.
-  Later phases add: torso, arms, sensors, face panel.
+  PHASE 2: adds torso, LED face, camera, LiDAR, 3-DOF right arm + gripper,
+           cosmetic left arm, and all required Gazebo plugins for sensors
+           and joint control.
 
-  URDF structure: a tree of links (rigid bodies) joined by joints.
-  Every chain starts at base_link (the root, with no parent).
+  Link tree:
+    base_link
+    ├── front_left_wheel   (continuous)
+    ├── front_right_wheel  (continuous)
+    ├── rear_left_wheel    (continuous)
+    ├── rear_right_wheel   (continuous)
+    └── torso_link         (fixed)
+        ├── face_panel_link    (fixed — LED display, visual only)
+        ├── camera_link        (fixed — forward camera sensor)
+        ├── lidar_link         (fixed — 360° LiDAR sensor)
+        ├── right_shoulder_link (revolute — shoulder joint, pitch)
+        │   └── right_forearm_link (revolute — elbow joint, pitch)
+        │       └── right_gripper_base (revolute — wrist joint, yaw)
+        │           ├── right_gripper_left_finger  (prismatic)
+        │           └── right_gripper_right_finger (prismatic)
+        └── left_shoulder_link  (fixed — cosmetic left arm)
+            └── left_forearm_link   (fixed)
+                └── left_gripper_base   (fixed)
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="tidybot">
 
@@ -177,5 +194,505 @@
       <topic>/joint_states</topic>
     </plugin>
   </gazebo>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       ── PHASE 2 CONTENT ─────────────────────────────────────────
+  ═══════════════════════════════════════════════════════════════ -->
+
+  <!-- ───────────────────────────────────────────────────────────────
+       TORSO
+       A vertical box mounted on top of base_link via a fixed joint.
+       Fixed joint = no actuator, no DOF — it's rigidly welded.
+       The torso carries everything else: sensors, arms, face panel.
+
+       Coordinate note: with base_link at z=0.13 world and the joint
+       at +0.335, the torso center is at 0.465m above ground.
+  ─────────────────────────────────────────────────────────────── -->
+
+  <link name="torso_link">
+    <visual>
+      <geometry><box size="${torso_x} ${torso_y} ${torso_z}"/></geometry>
+      <material name="light_grey"/>
+    </visual>
+    <collision>
+      <geometry><box size="${torso_x} ${torso_y} ${torso_z}"/></geometry>
+    </collision>
+    <xacro:inertia_box m="${torso_mass}" x="${torso_x}" y="${torso_y}" z="${torso_z}"/>
+  </link>
+
+  <joint name="torso_joint" type="fixed">
+    <parent link="base_link"/>
+    <child  link="torso_link"/>
+    <!-- torso_joint_z = base_z/2 + torso_z/2 = 0.06 + 0.275 = 0.335 -->
+    <origin xyz="0 0 ${torso_joint_z}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ───────────────────────────────────────────────────────────────
+       LED FACE PANEL
+       Assignment: "A flat rectangular panel on top of the torso
+       representing an LED display face."
+       Implementation: bright cyan flat box, lying horizontally on
+       the very top of the torso. Visual-only — no collision, no mass
+       contribution to simulation (tiny mass so physics is happy).
+  ─────────────────────────────────────────────────────────────── -->
+
+  <link name="face_panel_link">
+    <visual>
+      <geometry><box size="0.18 0.14 0.02"/></geometry>
+      <material name="led_cyan"/>
+    </visual>
+    <!-- Collision omitted intentionally — it's purely decorative.
+         A very thin collision box could catch on door frames. -->
+    <xacro:inertia_box m="0.1" x="0.18" y="0.14" z="0.02"/>
+  </link>
+
+  <joint name="face_panel_joint" type="fixed">
+    <parent link="torso_link"/>
+    <child  link="face_panel_link"/>
+    <!-- Sits on top of torso: torso_z/2 + panel_z/2 = 0.275 + 0.01 = 0.285 -->
+    <origin xyz="0 0 0.285" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ───────────────────────────────────────────────────────────────
+       FORWARD CAMERA (torso-mounted, not head-mounted)
+       Assignment: "A camera mounted on the torso (not the head)
+       facing forward, publishing image data to a ROS 2 topic."
+
+       Camera link position in torso frame: front face, mid-height.
+         x = torso_x/2 + camera_box/2 = 0.10 + 0.02 = 0.12
+         z = 0.10 (mid-torso, decent height for navigation)
+
+       The sensor is declared inside <gazebo reference="camera_link">.
+       This is the URDF way to attach Ignition sensor definitions —
+       the sdformat_urdf converter moves it into the right SDF scope.
+
+       Camera convention: in Ignition Gazebo, the camera images capture
+       what is along the sensor link's +X axis (the ROS convention).
+  ─────────────────────────────────────────────────────────────── -->
+
+  <link name="camera_link">
+    <visual>
+      <geometry><box size="0.04 0.04 0.04"/></geometry>
+      <material name="camera_red"/>
+    </visual>
+    <collision>
+      <geometry><box size="0.04 0.04 0.04"/></geometry>
+    </collision>
+    <xacro:inertia_box m="0.05" x="0.04" y="0.04" z="0.04"/>
+  </link>
+
+  <joint name="camera_joint" type="fixed">
+    <parent link="torso_link"/>
+    <child  link="camera_link"/>
+    <!-- Front face of torso (+X), mid-height (+z=0.10 in torso frame) -->
+    <origin xyz="0.12 0 0.10" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Camera sensor definition inside <gazebo reference="...">
+       The Ignition Sensors plugin (added at model level below) is what
+       actually renders the images. Without that plugin, this sensor does
+       nothing even if the link exists. -->
+  <gazebo reference="camera_link">
+    <sensor name="front_camera" type="camera">
+      <!-- The topic name Ignition publishes images on.
+           Leading "/" makes it absolute (not namespaced to the model). -->
+      <topic>/camera/image_raw</topic>
+      <update_rate>15</update_rate>
+      <camera name="front_camera">
+        <!-- horizontal_fov in radians. 1.047 rad = 60 degrees.
+             Wide FOV helps with navigation obstacle detection. -->
+        <horizontal_fov>1.0472</horizontal_fov>
+        <image>
+          <!-- Low resolution for performance. Navigation doesn't need 1080p. -->
+          <width>320</width>
+          <height>240</height>
+          <format>R8G8B8</format>
+        </image>
+        <clip>
+          <!-- near: objects closer than 5cm are clipped (prevents z-fighting) -->
+          <!-- far: objects further than 15m are not rendered -->
+          <near>0.05</near>
+          <far>15.0</far>
+        </clip>
+        <noise>
+          <type>gaussian</type>
+          <mean>0.0</mean>
+          <stddev>0.007</stddev>
+        </noise>
+      </camera>
+      <always_on>true</always_on>
+      <visualize>false</visualize>
+    </sensor>
+  </gazebo>
+
+  <!-- ───────────────────────────────────────────────────────────────
+       LIDAR (second sensor)
+       Implementation: 360° horizontal LiDAR — most useful for
+       obstacle avoidance navigation in Phase 4.
+
+       Position: near the top of the torso, slightly below face panel.
+         z = 0.24 in torso frame → 0.465 + 0.24 = 0.705m world height.
+
+       type="gpu_lidar": uses GPU-accelerated ray casting via OGRE2.
+       If your machine has no GPU, change this to type="lidar".
+  ─────────────────────────────────────────────────────────────── -->
+
+  <link name="lidar_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.05" length="0.05"/></geometry>
+      <material name="lidar_black"/>
+    </visual>
+    <collision>
+      <geometry><cylinder radius="0.05" length="0.05"/></geometry>
+    </collision>
+    <xacro:inertia_cylinder m="0.15" r="0.05" h="0.05"/>
+  </link>
+
+  <joint name="lidar_joint" type="fixed">
+    <parent link="torso_link"/>
+    <child  link="lidar_link"/>
+    <!-- Near top of torso, centered -->
+    <origin xyz="0 0 0.24" rpy="0 0 0"/>
+  </joint>
+
+  <gazebo reference="lidar_link">
+    <!-- type="lidar" uses CPU ray-casting — no GPU required.
+         type="gpu_lidar" is faster but crashes if OGRE2/EGL can't initialize
+         (common on machines without a discrete GPU or in virtual environments).
+         Switch to gpu_lidar only if you have confirmed hardware OpenGL support. -->
+    <sensor name="lidar" type="lidar">
+      <topic>/scan</topic>
+      <update_rate>10</update_rate>
+      <lidar>
+        <scan>
+          <horizontal>
+            <!-- 360 samples = one ray per degree. Good resolution
+                 without excessive computational load. -->
+            <samples>360</samples>
+            <resolution>1</resolution>
+            <min_angle>-3.14159</min_angle>
+            <max_angle>3.14159</max_angle>
+          </horizontal>
+        </scan>
+        <range>
+          <min>0.12</min>   <!-- min: avoids detecting own chassis -->
+          <max>8.0</max>    <!-- max: covers the home's longest dimension -->
+          <resolution>0.01</resolution>
+        </range>
+        <noise>
+          <type>gaussian</type>
+          <mean>0.0</mean>
+          <stddev>0.01</stddev>
+        </noise>
+      </lidar>
+      <always_on>true</always_on>
+      <!-- visualize: true shows the LiDAR rays in Gazebo GUI (useful for debugging) -->
+      <visualize>true</visualize>
+    </sensor>
+  </gazebo>
+
+  <!-- ───────────────────────────────────────────────────────────────
+       NOTE: The Sensors system plugin is declared ONLY in home.sdf (world level).
+       DO NOT add it here in the robot URDF as well.
+  ─────────────────────────────────────────────────────────────── -->
+
+  <!-- ───────────────────────────────────────────────────────────────
+       RIGHT ARM (3-DOF ACTUATED)
+       The arm must be capable of reaching the ground plane."
+
+       Zero-configuration (θ=0 for all joints):
+         The arm extends horizontally FORWARD (+X direction).
+         This is achieved by rpy="0 1.5707 0" on the shoulder joint origin,
+         which rotates the child frame so its Z axis (arm direction) aligns
+         with the parent's +X (forward).
+
+         At θ=0: arm points forward, no ground collision at spawn.
+         At θ_shoulder=π/2: arm points straight DOWN (-Z world).
+
+       Floor reach verification (θ_shoulder=π/2, θ_elbow=0):
+         Shoulder world z  = 0.13 + 0.335 + 0.05 = 0.515m
+         After upper arm:  = 0.515 - 0.22  = 0.295m
+         After forearm:    = 0.295 - 0.22  = 0.075m  (wrist height)
+         Finger tips:      = 0.075 - 0.07  = 0.005m  ← just at floor ✓
+
+       Joint axes (all in child-link frame at θ=0):
+         Shoulder: Y-axis → pitch (swings arm up/down when at horizontal)
+         Elbow:    Y-axis → pitch (bends the forearm relative to upper arm)
+         Wrist:    Z-axis → yaw  (rotates gripper orientation)
+  ─────────────────────────────────────────────────────────────── -->
+
+  <!-- Shoulder link (upper arm segment) -->
+  <link name="right_shoulder_link">
+    <visual>
+      <!-- Arm extends along child Z. At θ=0 this is the +X world direction.
+           The visual center is at half-length along the arm. -->
+      <origin xyz="0 0 ${upper_arm_len/2.0}" rpy="0 0 0"/>
+      <geometry><box size="${upper_arm_w} ${upper_arm_w} ${upper_arm_len}"/></geometry>
+      <material name="arm_grey"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${upper_arm_len/2.0}" rpy="0 0 0"/>
+      <geometry><box size="${upper_arm_w} ${upper_arm_w} ${upper_arm_len}"/></geometry>
+    </collision>
+    <xacro:inertia_box m="0.8" x="${upper_arm_w}" y="${upper_arm_w}" z="${upper_arm_len}"/>
+  </link>
+
+  <!-- Shoulder joint: mounted on right side (-Y) of torso.
+       rpy="0 1.5707 0": rotates child frame so child-Z = parent-X (forward).
+       This makes the zero position "arm horizontal forward". -->
+  <joint name="right_shoulder_joint" type="revolute">
+    <parent link="torso_link"/>
+    <child  link="right_shoulder_link"/>
+    <origin xyz="0 -${shoulder_y_off} ${shoulder_z}" rpy="0 1.5707 0"/>
+    <!-- Y-axis: positive rotation swings the arm downward (toward floor) -->
+    <axis xyz="0 1 0"/>
+    <limit lower="-1.57" upper="2.00" effort="200" velocity="2.0"/>
+    <dynamics damping="1.0" friction="0.3"/>
+  </joint>
+
+  <!-- Forearm link -->
+  <link name="right_forearm_link">
+    <visual>
+      <origin xyz="0 0 ${forearm_len/2.0}" rpy="0 0 0"/>
+      <geometry><box size="${forearm_w} ${forearm_w} ${forearm_len}"/></geometry>
+      <material name="arm_grey"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${forearm_len/2.0}" rpy="0 0 0"/>
+      <geometry><box size="${forearm_w} ${forearm_w} ${forearm_len}"/></geometry>
+    </collision>
+    <xacro:inertia_box m="0.5" x="${forearm_w}" y="${forearm_w}" z="${forearm_len}"/>
+  </link>
+
+  <!-- Elbow joint: at the end of the upper arm segment.
+       xyz="0 0 upper_arm_len" places it at the tip of the shoulder link. -->
+  <joint name="right_elbow_joint" type="revolute">
+    <parent link="right_shoulder_link"/>
+    <child  link="right_forearm_link"/>
+    <origin xyz="0 0 ${upper_arm_len}" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-2.50" upper="0.50" effort="150" velocity="2.5"/>
+    <dynamics damping="0.8" friction="0.2"/>
+  </joint>
+
+  <!-- Gripper base link (wrist segment) -->
+  <link name="right_gripper_base">
+    <visual>
+      <!-- Flat box: wide in X and Y, thin in Z — the palm of the gripper -->
+      <origin xyz="0 0 ${gripper_base_z/2.0}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${gripper_base_x} ${gripper_base_y} ${gripper_base_z}"/>
+      </geometry>
+      <material name="gripper_dark"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${gripper_base_z/2.0}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${gripper_base_x} ${gripper_base_y} ${gripper_base_z}"/>
+      </geometry>
+    </collision>
+    <xacro:inertia_box m="0.2" x="${gripper_base_x}" y="${gripper_base_y}" z="${gripper_base_z}"/>
+  </link>
+
+  <!-- Wrist joint: at the end of the forearm.
+       Axis Z: rotation spins the gripper orientation (roll of the end-effector).
+       This lets the robot adjust grip angle when approaching objects. -->
+  <joint name="right_wrist_joint" type="revolute">
+    <parent link="right_forearm_link"/>
+    <child  link="right_gripper_base"/>
+    <origin xyz="0 0 ${forearm_len}" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.57" upper="1.57" effort="50" velocity="3.0"/>
+    <dynamics damping="0.5" friction="0.1"/>
+  </joint>
+
+  <!-- ──────────────────────────────────────────────────
+       PARALLEL JAW GRIPPER
+       Two prismatic (sliding) joints that open/close.
+       Left finger slides in +Y, right finger in -Y.
+       Limit: 0 (fully closed) to 0.04m (fully open = 8cm jaw gap).
+
+       Why prismatic? It's the simplest grip mechanism that correctly
+       models contact forces. A revolute "jaw" could also work but
+       requires more complex IK for the closing motion.
+  ────────────────────────────────────────────────── -->
+
+  <link name="right_gripper_left_finger">
+    <visual>
+      <geometry><box size="${finger_x} ${finger_y} ${finger_z}"/></geometry>
+      <material name="gripper_dark"/>
+    </visual>
+    <collision>
+      <geometry><box size="${finger_x} ${finger_y} ${finger_z}"/></geometry>
+      <surface>
+        <friction><ode><mu>1.2</mu><mu2>1.2</mu2></ode></friction>
+      </surface>
+    </collision>
+    <xacro:inertia_box m="0.05" x="${finger_x}" y="${finger_y}" z="${finger_z}"/>
+  </link>
+
+  <!-- Left finger slides in +Y direction (outward from center) to open -->
+  <joint name="right_gripper_left_joint" type="prismatic">
+    <parent link="right_gripper_base"/>
+    <child  link="right_gripper_left_finger"/>
+    <!-- Start at y=+0.03 (center of finger already offset from center) -->
+    <origin xyz="0 0.03 ${gripper_base_z + finger_z/2.0}" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="0.0" upper="0.04" effort="20" velocity="0.1"/>
+    <dynamics damping="0.5" friction="0.1"/>
+  </joint>
+
+  <link name="right_gripper_right_finger">
+    <visual>
+      <geometry><box size="${finger_x} ${finger_y} ${finger_z}"/></geometry>
+      <material name="gripper_dark"/>
+    </visual>
+    <collision>
+      <geometry><box size="${finger_x} ${finger_y} ${finger_z}"/></geometry>
+      <surface>
+        <friction><ode><mu>1.2</mu><mu2>1.2</mu2></ode></friction>
+      </surface>
+    </collision>
+    <xacro:inertia_box m="0.05" x="${finger_x}" y="${finger_y}" z="${finger_z}"/>
+  </link>
+
+  <!-- Right finger slides in -Y direction (opposite to left) to open -->
+  <joint name="right_gripper_right_joint" type="prismatic">
+    <parent link="right_gripper_base"/>
+    <child  link="right_gripper_right_finger"/>
+    <origin xyz="0 -0.03 ${gripper_base_z + finger_z/2.0}" rpy="0 0 0"/>
+    <axis xyz="0 -1 0"/>
+    <limit lower="0.0" upper="0.04" effort="20" velocity="0.1"/>
+    <dynamics damping="0.5" friction="0.1"/>
+  </joint>
+
+  <!-- ──────────────────────────────────────────────────
+       ARM JOINT CONTROLLERS
+       One JointPositionController plugin per controlled joint.
+       Each listens on a dedicated topic for a Float64 position command.
+  ────────────────────────────────────────────────── -->
+
+  <gazebo>
+    <plugin filename="ignition-gazebo-joint-position-controller-system"
+            name="ignition::gazebo::systems::JointPositionController">
+      <joint_name>right_shoulder_joint</joint_name>
+      <topic>/arm/shoulder_cmd</topic>
+      <p_gain>80</p_gain><i_gain>0.5</i_gain><d_gain>8</d_gain>
+      <i_max>50</i_max><i_min>-50</i_min>
+      <cmd_max>200</cmd_max><cmd_min>-200</cmd_min>
+    </plugin>
+  </gazebo>
+
+  <gazebo>
+    <plugin filename="ignition-gazebo-joint-position-controller-system"
+            name="ignition::gazebo::systems::JointPositionController">
+      <joint_name>right_elbow_joint</joint_name>
+      <topic>/arm/elbow_cmd</topic>
+      <p_gain>60</p_gain><i_gain>0.3</i_gain><d_gain>6</d_gain>
+      <i_max>40</i_max><i_min>-40</i_min>
+      <cmd_max>150</cmd_max><cmd_min>-150</cmd_min>
+    </plugin>
+  </gazebo>
+
+  <gazebo>
+    <plugin filename="ignition-gazebo-joint-position-controller-system"
+            name="ignition::gazebo::systems::JointPositionController">
+      <joint_name>right_wrist_joint</joint_name>
+      <topic>/arm/wrist_cmd</topic>
+      <p_gain>30</p_gain><i_gain>0.2</i_gain><d_gain>3</d_gain>
+      <i_max>20</i_max><i_min>-20</i_min>
+      <cmd_max>50</cmd_max><cmd_min>-50</cmd_min>
+    </plugin>
+  </gazebo>
+
+  <gazebo>
+    <plugin filename="ignition-gazebo-joint-position-controller-system"
+            name="ignition::gazebo::systems::JointPositionController">
+      <joint_name>right_gripper_left_joint</joint_name>
+      <topic>/arm/gripper_cmd</topic>
+      <p_gain>40</p_gain><i_gain>0.1</i_gain><d_gain>2</d_gain>
+      <i_max>10</i_max><i_min>-10</i_min>
+      <cmd_max>20</cmd_max><cmd_min>-20</cmd_min>
+    </plugin>
+  </gazebo>
+
+  <gazebo>
+    <plugin filename="ignition-gazebo-joint-position-controller-system"
+            name="ignition::gazebo::systems::JointPositionController">
+      <joint_name>right_gripper_right_joint</joint_name>
+      <topic>/arm/gripper_cmd</topic>   <!-- same topic as left finger -->
+      <p_gain>40</p_gain><i_gain>0.1</i_gain><d_gain>2</d_gain>
+      <i_max>10</i_max><i_min>-10</i_min>
+      <cmd_max>20</cmd_max><cmd_min>-20</cmd_min>
+    </plugin>
+  </gazebo>
+
+  <!-- ───────────────────────────────────────────────────────────────
+       LEFT ARM (COSMETIC / STATIC)
+       Assignment: "A second arm on the opposite side of the torso —
+       this can be a static/cosmetic arm."
+       All joints are type="fixed" — no actuators, no controllers.
+       Same geometry as right arm so the robot looks symmetric.
+       Mounted on +Y side of torso (mirror of right arm at -Y).
+  ─────────────────────────────────────────────────────────────── -->
+
+  <link name="left_shoulder_link">
+    <visual>
+      <origin xyz="0 0 ${upper_arm_len/2.0}" rpy="0 0 0"/>
+      <geometry><box size="${upper_arm_w} ${upper_arm_w} ${upper_arm_len}"/></geometry>
+      <material name="arm_left"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${upper_arm_len/2.0}" rpy="0 0 0"/>
+      <geometry><box size="${upper_arm_w} ${upper_arm_w} ${upper_arm_len}"/></geometry>
+    </collision>
+    <xacro:inertia_box m="0.8" x="${upper_arm_w}" y="${upper_arm_w}" z="${upper_arm_len}"/>
+  </link>
+
+  <!-- Opposite side: y = +shoulder_y_off. Same rpy for symmetric appearance. -->
+  <joint name="left_shoulder_joint" type="fixed">
+    <parent link="torso_link"/>
+    <child  link="left_shoulder_link"/>
+    <origin xyz="0 ${shoulder_y_off} ${shoulder_z}" rpy="0 1.5707 0"/>
+  </joint>
+
+  <link name="left_forearm_link">
+    <visual>
+      <origin xyz="0 0 ${forearm_len/2.0}" rpy="0 0 0"/>
+      <geometry><box size="${forearm_w} ${forearm_w} ${forearm_len}"/></geometry>
+      <material name="arm_left"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${forearm_len/2.0}" rpy="0 0 0"/>
+      <geometry><box size="${forearm_w} ${forearm_w} ${forearm_len}"/></geometry>
+    </collision>
+    <xacro:inertia_box m="0.5" x="${forearm_w}" y="${forearm_w}" z="${forearm_len}"/>
+  </link>
+
+  <joint name="left_elbow_joint" type="fixed">
+    <parent link="left_shoulder_link"/>
+    <child  link="left_forearm_link"/>
+    <origin xyz="0 0 ${upper_arm_len}" rpy="0 0 0"/>
+  </joint>
+
+  <link name="left_gripper_base">
+    <visual>
+      <origin xyz="0 0 ${gripper_base_z/2.0}" rpy="0 0 0"/>
+      <geometry><box size="${gripper_base_x} ${gripper_base_y} ${gripper_base_z}"/></geometry>
+      <material name="arm_left"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${gripper_base_z/2.0}" rpy="0 0 0"/>
+      <geometry><box size="${gripper_base_x} ${gripper_base_y} ${gripper_base_z}"/></geometry>
+    </collision>
+    <xacro:inertia_box m="0.2" x="${gripper_base_x}" y="${gripper_base_y}" z="${gripper_base_z}"/>
+  </link>
+
+  <joint name="left_wrist_joint" type="fixed">
+    <parent link="left_forearm_link"/>
+    <child  link="left_gripper_base"/>
+    <origin xyz="0 0 ${forearm_len}" rpy="0 0 0"/>
+  </joint>
 
 </robot>
