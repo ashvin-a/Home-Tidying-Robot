@@ -2,7 +2,7 @@
 
 A complete ROS 2 + Gazebo simulation of a home-tidying robot. The robot navigates a two-room home, detects small objects, picks them up, and returns them to a collection box.
 
-> **Demo Video**: _[Link will be added after recording]_
+> **Demo Video**: [Link](https://drive.google.com/file/d/1w3XHiQi6Qk40-G-TXegO0mvAY2g0DL9P/view?usp=sharing)
 
 ---
 
