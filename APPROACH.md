@@ -1,8 +1,8 @@
 ## My Build vs. Drift's Build
 In the simulation that I made, the room structure was more correct than that of Drift's. In the Drift's simulation, the wall separating the two rooms didn't have a gap. So the robot had no way to cross the room. Also, the starting point in Drift's simulation was a bit congested. Because of that, the robot was stuck at the initial waypoint itself. Since it was stuck at the initial waypoint, I was not able to see how well the object detection and pick-and-place behaviors worked.
 
-My Build : [Link](https://drive.google.com/file/d/1w3XHiQi6Qk40-G-TXegO0mvAY2g0DL9P/view?usp=sharing)
-Drift's Build : [Link](https://drive.google.com/file/d/1zGtI-lmarVDs-I95Ha3CZCHSyT318vbx/view?usp=sharing)
+- My Build : [Link](https://drive.google.com/file/d/1w3XHiQi6Qk40-G-TXegO0mvAY2g0DL9P/view?usp=sharing)
+- Drift's Build : [Link](https://drive.google.com/file/d/1zGtI-lmarVDs-I95Ha3CZCHSyT318vbx/view?usp=sharing)
 
 ## Robot Model Construction
 The base mobility platform was inspired by an open-source [4-wheel differential rover](https://github.com/Abdelrahman-Galal/4-wheel-differential-mobile-robot/blob/main/urdf/car-robot.urdf). Utilizing this structural baseline, alongside AI assistance (Gemini, Claude) for syntax formatting and boilerplate generation, I developed a custom URDF that strictly adheres to the physical and kinematic specifications required.
