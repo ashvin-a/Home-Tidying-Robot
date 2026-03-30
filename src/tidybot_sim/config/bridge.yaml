@@ -90,3 +90,34 @@
   ros_type_name:  "sensor_msgs/msg/CameraInfo"
   gz_type_name:   "ignition.msgs.CameraInfo"
   direction: GZ_TO_ROS
+
+
+#  PHASE 5: ARM JOINT COMMANDS 
+#
+# arm_controller publishes Float64 position targets.
+# Each JointPositionController plugin in the URDF subscribes to its topic on
+# the Ignition side (ignition.msgs.Double = Ignition's double scalar type).
+
+- ros_topic_name: "/arm/shoulder_cmd"
+  gz_topic_name:  "/arm/shoulder_cmd"
+  ros_type_name:  "std_msgs/msg/Float64"
+  gz_type_name:   "ignition.msgs.Double"
+  direction: ROS_TO_GZ
+
+- ros_topic_name: "/arm/elbow_cmd"
+  gz_topic_name:  "/arm/elbow_cmd"
+  ros_type_name:  "std_msgs/msg/Float64"
+  gz_type_name:   "ignition.msgs.Double"
+  direction: ROS_TO_GZ
+
+- ros_topic_name: "/arm/wrist_cmd"
+  gz_topic_name:  "/arm/wrist_cmd"
+  ros_type_name:  "std_msgs/msg/Float64"
+  gz_type_name:   "ignition.msgs.Double"
+  direction: ROS_TO_GZ
+
+- ros_topic_name: "/arm/gripper_cmd"
+  gz_topic_name:  "/arm/gripper_cmd"
+  ros_type_name:  "std_msgs/msg/Float64"
+  gz_type_name:   "ignition.msgs.Double"
+  direction: ROS_TO_GZ
