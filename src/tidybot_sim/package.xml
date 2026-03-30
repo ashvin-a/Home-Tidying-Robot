@@ -19,9 +19,9 @@
   <version>0.1.0</version>
   <description>
     Home-tidying robot simulation: URDF model, Gazebo world, and autonomous
-    navigation behavior. Drift internship assignment.
+    navigation behavior.
   </description>
-  <maintainer email="you@example.com">Your Name</maintainer>
+  <maintainer email="ashvinanilkumarsh@gmail.com">Ashvin Anilkumar</maintainer>
   <license>MIT</license>
 
   <!-- Build system: pure Python, no CMake needed -->
