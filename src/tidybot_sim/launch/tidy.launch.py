@@ -158,8 +158,7 @@ def generate_launch_description():
     #   b) Bridge running (so they can subscribe to bridged topics)
     # 6 seconds gives the spawn + bridge time to settle.
     #
-    # Phase 1: only the logger node (navigator + arm_controller come in Phase 4/5)
-    # Phase 4: uncomment navigator
+    # Phase 4: logger (full CSV) + navigator (waypoint state machine)
     # Phase 5: uncomment arm_controller
     logger_node = TimerAction(
         period=6.0,
@@ -174,16 +173,16 @@ def generate_launch_description():
         ],
     )
 
-    # navigator_node = TimerAction(
-    #     period=6.0,
-    #     actions=[Node(
-    #         package='tidybot_sim',
-    #         executable='navigator',
-    #         name='navigator',
-    #         output='screen',
-    #         parameters=[{'use_sim_time': True}],
-    #     )],
-    # )
+    navigator_node = TimerAction(
+        period=6.0,
+        actions=[Node(
+            package='tidybot_sim',
+            executable='navigator',
+            name='navigator',
+            output='screen',
+            parameters=[{'use_sim_time': True}],
+        )],
+    )
 
     # arm_controller_node = TimerAction(
     #     period=6.0,
@@ -211,5 +210,7 @@ def generate_launch_description():
         robot_state_publisher, # starts immediately
         bridge,               # starts immediately
         spawn_robot,          # runs after 3s
-        logger_node,          # runs after 6s (Phase 1: stub only)
+        logger_node,          # runs after 6s (Phase 4: full CSV logger)
+        navigator_node,       # runs after 6s (Phase 4: waypoint navigator)
+        # arm_controller_node,  # runs after 6s (Phase 5: full arm controller)
     ])
