@@ -34,7 +34,7 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
-from std_msgs.msg import String, Int32
+from std_msgs.msg import String, Int32, Bool
 
 
 # ── TUNING PARAMETERS ────────────────────────────────────────────────────────
@@ -111,8 +111,10 @@ class NavigatorNode(Node):
         # ── Subscribers ─────────────────────────────────────────────────
         # Queue size 1: we only care about the LATEST message, not a backlog.
         # If the callback can't keep up, older messages are dropped.
-        self.create_subscription(Odometry,   '/odom', self._odom_cb, 1)
-        self.create_subscription(LaserScan,  '/scan', self._scan_cb, 1)
+        self.create_subscription(Odometry,   '/odom',           self._odom_cb,         1)
+        self.create_subscription(LaserScan,  '/scan',           self._scan_cb,         1)
+        self.create_subscription(Bool, '/arm/pickup_done',  self._pickup_done_cb,  10)
+        self.create_subscription(Bool, '/arm/deposit_done', self._deposit_done_cb, 10)
 
         # ── State ────────────────────────────────────────────────────────
         self.odom: Odometry  = None
@@ -124,6 +126,12 @@ class NavigatorNode(Node):
         self.rooms_visited   = set()
         self._dist_traveled  = 0.0
         self._last_pos       = None
+
+        # Arm coordination (Phase 5)
+        self.pickup_start    = None    # rclpy Time when PICKUP state began
+        self.arm_busy        = False   # True from trigger → pickup_done received
+        PICKUP_TIMEOUT       = 20.0    # s — resume if arm doesn't respond
+        self._pickup_timeout = PICKUP_TIMEOUT
 
         # ── Control timer: runs the state machine at 10 Hz ───────────────
         # create_timer(period_seconds, callback)
@@ -163,6 +171,31 @@ class NavigatorNode(Node):
         """Store latest LaserScan."""
         self.scan = msg
 
+    def _pickup_done_cb(self, msg: Bool):
+        """
+        arm_controller publishes True here when the pickup sequence is finished
+        and the arm is raised to carry height. The navigator resumes driving.
+        """
+        if msg.data and self.state == State.PICKUP:
+            self.get_logger().info(
+                'Arm pickup complete — resuming navigation. '
+                '(arm_busy stays True until deposit)'
+            )
+            # Do NOT clear arm_busy here — arm is still CARRYING the object.
+            # We clear arm_busy in _deposit_done_cb when arm returns to IDLE.
+            self.pickup_start = None
+            self.state        = State.ROTATING
+
+    def _deposit_done_cb(self, msg: Bool):
+        """
+        arm_controller publishes True here when it has deposited the object
+        and returned to IDLE. Clears the arm_busy flag so the navigator can
+        trigger the next pickup on a future waypoint.
+        """
+        if msg.data:
+            self.get_logger().info('Arm deposit complete — arm_busy cleared.')
+            self.arm_busy = False
+
     # ── Main control loop (10 Hz) ─────────────────────────────────────────────
 
     def _control_loop(self):
@@ -180,9 +213,18 @@ class NavigatorNode(Node):
             return
 
         if self.state == State.PICKUP:
-            # Arm controller is handling this — navigator waits.
-            # Phase 5 will add logic to resume after pickup is done.
             self._publish_cmd(0.0, 0.0)
+            # Safety timeout: if arm_controller doesn't publish pickup_done
+            # within _pickup_timeout seconds, resume navigation anyway.
+            if self._sim_elapsed_since(self.pickup_start) > self._pickup_timeout:
+                self.get_logger().warn(
+                    f'Arm pickup timed out after {self._pickup_timeout:.0f}s '
+                    f'— resuming navigation. arm_busy stays True.'
+                )
+                # Keep arm_busy=True so we don't re-trigger while arm may
+                # still be mid-sequence. Cleared only by deposit_done.
+                self.pickup_start = None
+                self.state        = State.ROTATING
             return
 
         # ── Current pose from odometry ──────────────────────────────────
@@ -306,23 +348,38 @@ class NavigatorNode(Node):
     def _check_pickup_trigger(self, x: float, y: float):
         """
         Check if the robot is near any pickup object and trigger the arm
-        controller if so. Uses a proximity threshold.
-        This is the Phase 4 hook — Phase 5 will make the arm actually move.
+        controller if so. Enters PICKUP state so the navigator waits while
+        the arm performs the pickup sequence.
+
+        Guards:
+          - arm_busy: True from trigger until arm signals pickup_done.
+            Prevents triggering a second pickup while the arm is still
+            carrying the first object (arm_controller ignores triggers
+            when not IDLE, which would leave the navigator stuck forever).
+          - objects_nearby: set of already-triggered objects, prevents
+            re-triggering the same object.
         """
+        if self.arm_busy:
+            return  # arm is carrying or running a sequence — skip
+
         for name, (ox, oy) in OBJECT_POSITIONS.items():
             if name in self.objects_nearby:
-                continue  # already triggered
+                continue  # already handled
             if math.hypot(x - ox, y - oy) < PICKUP_RADIUS:
                 self.objects_nearby.add(name)
-                # Publish object index (Phase 5: arm_controller subscribes to this)
                 idx = list(OBJECT_POSITIONS.keys()).index(name)
-                msg = Int32()
-                msg.data = idx
-                self.arm_trigger_pub.publish(msg)
+                trig_msg = Int32()
+                trig_msg.data = idx
+                self.arm_trigger_pub.publish(trig_msg)
+                # Mark arm as busy and record when we entered PICKUP
+                self.arm_busy     = True
+                self.pickup_start = self.get_clock().now()
+                self.state        = State.PICKUP
                 self.get_logger().info(
                     f'Near {name} at ({ox:.1f}, {oy:.1f}) — '
-                    f'arm trigger sent (index {idx})'
+                    f'arm trigger sent (index {idx}). Navigator paused.'
                 )
+                return  # only trigger one object per waypoint
 
     def _publish_cmd(self, linear: float, angular: float):
         """Publish a Twist command to /cmd_vel."""
