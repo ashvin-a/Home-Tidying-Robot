@@ -2,10 +2,6 @@
 <!--
   tidybot.urdf.xacro — Complete robot description.
 
-  PHASE 2: adds torso, LED face, camera, LiDAR, 3-DOF right arm + gripper,
-           cosmetic left arm, and all required Gazebo plugins for sensors
-           and joint control.
-
   Link tree:
     base_link
     ├── front_left_wheel   (continuous)
