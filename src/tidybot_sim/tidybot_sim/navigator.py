@@ -55,7 +55,7 @@ WAYPOINTS = [
     (7.0,  1.5),   # 6  Room 2 north (passes near obj_yellow, obj_orange)
     (8.0,  0.0),   # 7  Room 2 east center
     (7.5, -1.5),   # 8  Room 2 south-east (passes near obj_purple)
-    (6.5, 1.0),   # 9  Room 2 south return
+    (6.5, -0.5),   # 9  Room 2 south return
     (5.5,  0.0),   # 10 back through doorway
     (3.0,  0.5),   # 11 Room 1 return path
     (1.5,  1.5),   # 12 near collection box
@@ -80,7 +80,7 @@ OBSTACLE_DIST     = 0.55   # m — if LiDAR reads < this ahead, avoid
 FORWARD_HALF_ANG  = 0.52   # rad (≈30°) — the forward scan sector half-width
 AVOID_DURATION    = 2.0    # s — how long to turn away from an obstacle
 AVOID_TURN_RATE   = 0.50   # rad/s — rotation speed during avoidance
-PICKUP_RADIUS     = 0.60   # m — trigger arm controller when within this distance
+PICKUP_RADIUS     = 0.85   # m — trigger arm controller when within this distance
 ROOM2_X_THRESHOLD = 5.0    # m — x > this = robot is in Room 2
 STATUS_RATE_HZ    = 2.0    # Hz — how often to publish /tidybot/status
 
