@@ -140,13 +140,6 @@ In the terminal you should see:
 [logger]:    Rooms visited: Room1, Room2 | Total distance: 24.3m
 ```
 
-### Optional: Visualize in RViz
-
-```bash
-# In a separate terminal (with workspace sourced)
-rviz2 -d ~/tidybot_ws/src/config/tidybot.rviz
-```
-
 ### Optional: Monitor Sensor Topics
 
 ```bash
@@ -165,87 +158,7 @@ ros2 topic echo /tidybot/status
 
 ---
 
-## Package Structure
 
-```
-src/tidybot_sim/
-├── package.xml                     # ROS 2 package manifest
-├── setup.py                        # Python package install config
-├── setup.cfg
-├── resource/
-│   └── tidybot_sim                 # ament resource marker
-├── description/
-│   ├── tidybot.urdf.xacro          # Top-level robot entry point
-│   ├── base.xacro                  # 4-wheel skid-steer base + DiffDrive plugin
-│   ├── torso_and_sensors.xacro     # Torso, camera, LiDAR, face panel
-│   ├── right_arm.xacro             # 3-DOF actuated arm + parallel jaw gripper
-│   └── left_arm.xacro              # Cosmetic mirror arm (static joints)
-├── worlds/
-│   └── home.sdf                    # Two-room home world
-├── config/
-│   ├── bridge.yaml                 # ROS↔Gazebo topic bridge configuration
-│   └── tidybot.rviz                # RViz configuration
-├── launch/
-│   └── tidy.launch.py              # Single launch entry point
-├── tidybot_sim/
-│   ├── __init__.py
-│   ├── navigator.py                # Waypoint nav + LiDAR obstacle avoidance
-│   ├── arm_controller.py           # Arm joint control + pick-and-place
-│   └── logger.py                   # Odometry CSV logger
-└── docs/
-    └── APPROACH.md                 # Design decisions, tradeoffs, Drift comparison
-```
-
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Gazebo Simulation                     │
-│  ┌──────────────┐  ┌──────────────────────────────────┐ │
-│  │  home.sdf    │  │         tidybot robot            │ │
-│  │  - Room 1    │  │  ┌──────────────────────────┐    │ │
-│  │  - Room 2    │  │  │  DiffDrive plugin        │    │ │
-│  │  - Furniture │  │  │  Sensors system          │    │ │
-│  │  - 6 objects │  │  │  JointPositionController │    │ │
-│  │  - Coll. box │  │  │  DetachableJoint (×6)    │    │ │
-│  └──────────────┘  │  └──────────────────────────┘    │ │
-└────────────────────┼─────────────────────────────────── ┘
-                     │  ros_gz_bridge
-           ┌─────────▼──────────────────────┐
-           │         ROS 2 Topics           │
-           │  /cmd_vel    /odom             │
-           │  /scan       /camera/image_raw │
-           │  /joint_states  /clock         │
-           │  /arm/*_cmd  /gripper/attach_* │
-           └─────┬──────────┬──────────────┘
-                 │          │
-    ┌────────────▼──┐  ┌────▼──────────────┐  ┌──────────┐
-    │  navigator.py │  │ arm_controller.py │  │ logger.py│
-    │               │  │                   │  │          │
-    │  Waypoint nav │  │  Joint sequences  │  │  CSV log │
-    │  LiDAR avoid  │  │  Attach/detach    │  │  Odom    │
-    └───────────────┘  └───────────────────┘  └──────────┘
-```
-
-### Robot Design
-
-```
-        [LED Face Panel]
-             |||
-        ┌────────────┐
-        │   Torso    │◄── Camera (forward-facing)
-   Left │            │ Right  ◄── LiDAR (360°, top)
-   Arm  │            │ Arm (3-DOF: shoulder/elbow/wrist)
-(static)│            │ + Parallel Jaw Gripper
-        └────────────┘
-        ┌────────────┐
-        │    Base    │   0.50m × 0.48m × 0.12m
-FL ─────┤            ├───── FR    (skid-steer)
-RL ─────┤            ├───── RR
-        └────────────┘
-```
 
 ### Navigation Strategy
 
@@ -256,40 +169,6 @@ The navigator uses a **waypoint + reactive obstacle avoidance** approach:
 3. **Drive to waypoint**: move forward until within 0.25m of target
 4. **Obstacle avoidance**: if any LiDAR beam in the forward ±30° sector reads < 0.5m, rotate left at 0.4 rad/s for 1.5 seconds
 5. **Pick-and-place trigger**: when within 0.5m of a known object position, pause navigation and signal arm controller
-
-### Pick-and-Place Pipeline (Bonus)
-
-1. Navigator signals arm controller with object index via `/arm/trigger_pickup`
-2. Arm executes **PICKUP_SEQUENCE**: open gripper → reach down → close gripper → lift
-3. **DetachableJoint** plugin attaches object to gripper link
-4. Navigator resumes, returns to collection box position
-5. Arm executes **PLACE_SEQUENCE**: reach toward box → open gripper → retract
-6. Object detaches and falls into box
-
----
-
-## Home World Layout
-
-```
-┌─────────────────────────┬──────────────────────────┐
-│       ROOM 1            │        ROOM 2            │
-│    (5.0m × 4.5m)        │     (4.5m × 4.5m)        │
-│                         │                           │
-│  [Collection Box]       │          [Shelf]          │
-│  ★ Robot Start          │                           │
-│                         │                           │
-│     ● obj_red           │   ● obj_yellow            │
-│     ● obj_green    ════ │   ● obj_purple            │
-│     ● obj_blue   doorway│   ● obj_orange            │
-│                         │                           │
-│  [Table][Chairs]        │  [Table][Chairs]          │
-│  [Couch]                │                           │
-└─────────────────────────┴──────────────────────────┘
-  ● = pickup object (dynamic, on floor)
-  ★ = robot start position (0.5, 0.0)
-```
-
----
 
 ## Measurable Output
 
@@ -345,64 +224,6 @@ WAYPOINTS = [
 
 ---
 
-## Troubleshooting
-
-### Robot falls through the floor on spawn
-
-The robot spawns slightly above the ground (`z=0.13`). If it still falls through, verify wheel collision geometry is correct and ground plane friction is set (`mu=0.8`).
-
-### `/cmd_vel` topic not found
-
-The ROS-Gazebo bridge takes 2-4 seconds to initialize. The navigator waits 5 seconds before starting. If the issue persists:
-```bash
-ros2 topic list | grep cmd_vel
-```
-
-### Camera or LiDAR not publishing
-
-Ensure the Sensors system plugin appears in the world SDF **and** in the robot URDF:
-```bash
-ros2 topic hz /camera/image_raw
-ros2 topic hz /scan
-```
-
-### Robot does not move / stuck at waypoint
-
-Check for LiDAR obstacle detection false positives. The arm links can sometimes intrude into the forward sensing cone. Verify with:
-```bash
-ros2 topic echo /scan --field ranges
-```
-
-### Build fails: package not found
-
-```bash
-sudo apt update
-sudo apt install ros-humble-ros-gz ros-humble-xacro
-rosdep install --from-paths src --ignore-src -r -y
-```
-
-### Gazebo crashes with GPU error
-
-Try software rendering:
-```bash
-export LIBGL_ALWAYS_SOFTWARE=1
-ros2 launch tidybot_sim tidy.launch.py
-```
-
----
-
-## Dependencies
-
-### ROS 2 Packages
-
-| Package | Purpose |
-|---------|---------|
-| `ros-humble-ros-gz` | Gazebo integration meta-package |
-| `ros-humble-ros-gz-sim` | Gazebo simulation launch tools |
-| `ros-humble-ros-gz-bridge` | ROS 2 ↔ Gazebo topic bridge |
-| `ros-humble-xacro` | URDF macro processor |
-| `ros-humble-robot-state-publisher` | TF tree from URDF |
-| `ros-humble-joint-state-publisher` | Joint state broadcasting |
 
 ### Python Packages
 
@@ -419,10 +240,10 @@ See `requirements.txt`. All dependencies are standard ROS 2 Python libraries (`r
 - [x] Sensor data publishing (camera + LiDAR)
 - [x] Measurable output (CSV odometry log + terminal summary)
 - [x] Runs under 5 minutes simulation time
-- [x] Pick-and-place pipeline (bonus)
+- [ ] Pick-and-place pipeline (bonus)
 - [x] `requirements.txt`
 - [x] `docs/APPROACH.md`
-- [ ] Demo video link _(to be added)_
+- [x] Demo video link
 
 ---
 
@@ -432,5 +253,4 @@ See `requirements.txt`. All dependencies are standard ROS 2 Python libraries (`r
 - [Ignition Gazebo Documentation](https://gazebosim.org/docs)
 - [URDF Tutorials](https://docs.ros.org/en/humble/Tutorials/Intermediate/URDF/URDF-Main.html)
 - [ros_gz_bridge](https://github.com/gazebosim/ros_gz)
-
-No external URDF models were used as a base. All robot geometry is custom-designed to specification.
+- [4 wheeled differential drive](https://github.com/Abdelrahman-Galal/4-wheel-differential-mobile-robot/blob/main/urdf/car-robot.urdf)
