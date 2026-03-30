@@ -184,16 +184,16 @@ def generate_launch_description():
         )],
     )
 
-    # arm_controller_node = TimerAction(
-    #     period=6.0,
-    #     actions=[Node(
-    #         package='tidybot_sim',
-    #         executable='arm_controller',
-    #         name='arm_controller',
-    #         output='screen',
-    #         parameters=[{'use_sim_time': True}],
-    #     )],
-    # )
+    arm_controller_node = TimerAction(
+        period=6.0,
+        actions=[Node(
+            package='tidybot_sim',
+            executable='arm_controller',
+            name='arm_controller',
+            output='screen',
+            parameters=[{'use_sim_time': True}],
+        )],
+    )
 
     # ── ASSEMBLE LAUNCH DESCRIPTION 
     # All declared arguments must appear here.
@@ -212,5 +212,5 @@ def generate_launch_description():
         spawn_robot,          # runs after 3s
         logger_node,          # runs after 6s (Phase 4: full CSV logger)
         navigator_node,       # runs after 6s (Phase 4: waypoint navigator)
-        # arm_controller_node,  # runs after 6s (Phase 5: full arm controller)
+        arm_controller_node,  # runs after 6s (Phase 5: pick-and-place controller)
     ])
